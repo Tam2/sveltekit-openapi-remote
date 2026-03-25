@@ -1,4 +1,7 @@
 import { describe, it, expectTypeOf } from 'vitest';
+import { z } from 'zod';
+import type { StandardSchemaV1 } from '@standard-schema/spec';
+import type { RemoteFormInput } from '@sveltejs/kit';
 import type { PathsWithMethod, GetParameters, GetRequestBody, GetResponse } from '../src/types.js';
 
 interface MockPaths {
@@ -23,6 +26,42 @@ interface MockPaths {
       parameters: {
         path: { id: number };
       };
+      responses: {
+        200: { content: { 'application/json': { id: number; name: string } } };
+      };
+    };
+    delete: {
+      parameters: {
+        path: { id: number };
+      };
+      responses: {
+        200: { content: { 'application/json': { success: boolean } } };
+      };
+    };
+  };
+  '/users/{id}': {
+    get: {
+      parameters: {
+        path: { id: number };
+      };
+      responses: {
+        200: { content: { 'application/json': { id: number; name: string } } };
+      };
+    };
+    patch: {
+      parameters: {
+        path: { id: number };
+      };
+      requestBody: { content: { 'application/json': { name?: string; email?: string } } };
+      responses: {
+        200: { content: { 'application/json': { id: number; name: string } } };
+      };
+    };
+    put: {
+      parameters: {
+        path: { id: number };
+      };
+      requestBody: { content: { 'application/json': { name: string; email: string } } };
       responses: {
         200: { content: { 'application/json': { id: number; name: string } } };
       };
@@ -93,5 +132,103 @@ describe('GetResponse', () => {
   it('extracts 201 response', () => {
     type Result = GetResponse<MockPaths, '/users', 'post'>;
     expectTypeOf<Result>().toEqualTypeOf<{ id: number; name: string }>();
+  });
+});
+
+// Type alias matching what form() requires: StandardSchemaV1<RemoteFormInput, Record<string, any>>
+type FormSchema = StandardSchemaV1<RemoteFormInput, Record<string, any>>;
+// Type alias matching what query()/command() require: StandardSchemaV1 (unconstrained)
+type CommandSchema = StandardSchemaV1;
+
+describe('SvelteKit form() schema compatibility', () => {
+  // DELETE: params-only with z.custom
+  it('DELETE form schema: GetParameters & Record<string, any>', () => {
+    const schema = z.custom<GetParameters<MockPaths, '/users/{id}', 'delete'> & Record<string, any>>();
+    expectTypeOf(schema).toMatchTypeOf<FormSchema>();
+  });
+
+  // POST body-only (no path params) with z.custom
+  it('POST body-only form schema: GetRequestBody & Record<string, any>', () => {
+    const schema = z.custom<GetRequestBody<MockPaths, '/users', 'post'> & Record<string, any>>();
+    expectTypeOf(schema).toMatchTypeOf<FormSchema>();
+  });
+
+  // PATCH with path params + body: z.object cast pattern
+  it('PATCH form schema with path + body (z.object cast)', () => {
+    type Schema = { path: GetParameters<MockPaths, '/users/{id}', 'patch'>['path']; body: GetRequestBody<MockPaths, '/users/{id}', 'patch'> } & Record<string, any>;
+    const schema = z.object({
+      path: z.custom<GetParameters<MockPaths, '/users/{id}', 'patch'>['path']>(),
+      body: z.custom<GetRequestBody<MockPaths, '/users/{id}', 'patch'>>(),
+    }) as unknown as z.ZodType<Schema>;
+    expectTypeOf(schema).toMatchTypeOf<FormSchema>();
+  });
+
+  // PUT with path params + body: z.object cast pattern
+  it('PUT form schema with path + body (z.object cast)', () => {
+    type Schema = { path: GetParameters<MockPaths, '/users/{id}', 'put'>['path']; body: GetRequestBody<MockPaths, '/users/{id}', 'put'> } & Record<string, any>;
+    const schema = z.object({
+      path: z.custom<GetParameters<MockPaths, '/users/{id}', 'put'>['path']>(),
+      body: z.custom<GetRequestBody<MockPaths, '/users/{id}', 'put'>>(),
+    }) as unknown as z.ZodType<Schema>;
+    expectTypeOf(schema).toMatchTypeOf<FormSchema>();
+  });
+
+  // Regression: bare types without Record<string, any> must NOT satisfy form()
+  it('bare GetParameters does NOT satisfy form() constraint', () => {
+    const schema = z.custom<GetParameters<MockPaths, '/users/{id}', 'delete'>>();
+    expectTypeOf(schema).not.toMatchTypeOf<FormSchema>();
+  });
+
+  it('bare GetRequestBody does NOT satisfy form() constraint', () => {
+    const schema = z.custom<GetRequestBody<MockPaths, '/users', 'post'>>();
+    expectTypeOf(schema).not.toMatchTypeOf<FormSchema>();
+  });
+
+  it('bare z.object({ path, body }) does NOT satisfy form() constraint', () => {
+    const schema = z.object({
+      path: z.custom<GetParameters<MockPaths, '/users/{id}', 'patch'>['path']>(),
+      body: z.custom<GetRequestBody<MockPaths, '/users/{id}', 'patch'>>(),
+    });
+    expectTypeOf(schema).not.toMatchTypeOf<FormSchema>();
+  });
+});
+
+describe('SvelteKit query() schema compatibility', () => {
+  it('GET with query params', () => {
+    const schema = z.custom<GetParameters<MockPaths, '/users', 'get'>>();
+    expectTypeOf(schema).toMatchTypeOf<CommandSchema>();
+  });
+
+  it('GET with path params', () => {
+    const schema = z.custom<GetParameters<MockPaths, '/users/{id}', 'get'>>();
+    expectTypeOf(schema).toMatchTypeOf<CommandSchema>();
+  });
+});
+
+describe('SvelteKit command() schema compatibility', () => {
+  it('DELETE command: GetParameters', () => {
+    const schema = z.custom<GetParameters<MockPaths, '/users/{id}', 'delete'>>();
+    expectTypeOf(schema).toMatchTypeOf<CommandSchema>();
+  });
+
+  it('POST command body-only: GetRequestBody', () => {
+    const schema = z.custom<GetRequestBody<MockPaths, '/users', 'post'>>();
+    expectTypeOf(schema).toMatchTypeOf<CommandSchema>();
+  });
+
+  it('PATCH command with path + body: z.object', () => {
+    const schema = z.object({
+      path: z.custom<GetParameters<MockPaths, '/users/{id}', 'patch'>['path']>(),
+      body: z.custom<GetRequestBody<MockPaths, '/users/{id}', 'patch'>>(),
+    });
+    expectTypeOf(schema).toMatchTypeOf<CommandSchema>();
+  });
+
+  it('PUT command with path + body: z.object', () => {
+    const schema = z.object({
+      path: z.custom<GetParameters<MockPaths, '/users/{id}', 'put'>['path']>(),
+      body: z.custom<GetRequestBody<MockPaths, '/users/{id}', 'put'>>(),
+    });
+    expectTypeOf(schema).toMatchTypeOf<CommandSchema>();
   });
 });
