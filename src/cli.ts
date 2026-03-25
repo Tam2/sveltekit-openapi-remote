@@ -189,7 +189,8 @@ async function runGenerate(args: CliArgs): Promise<void> {
 }
 
 // Only run when executed directly (not when imported by tests)
-const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
-if (isMain) {
+const thisFile = fs.realpathSync(fileURLToPath(import.meta.url));
+const entryFile = process.argv[1] ? fs.realpathSync(path.resolve(process.argv[1])) : '';
+if (thisFile === entryFile) {
   createProgram().parseAsync();
 }
