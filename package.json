@@ -1,0 +1,77 @@
+{
+  "name": "sveltekit-openapi-remote",
+  "version": "0.1.0",
+  "description": "Generate SvelteKit remote functions directly from OpenAPI/Swagger specs.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Tam",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tam2/sveltekit-openapi-remote.git"
+  },
+  "homepage": "https://github.com/tam2/sveltekit-openapi-remote#readme",
+  "bugs": {
+    "url": "https://github.com/tam2/sveltekit-openapi-remote/issues"
+  },
+  "keywords": [
+    "sveltekit",
+    "openapi",
+    "swagger",
+    "remote-functions",
+    "codegen",
+    "typescript",
+    "openapi-fetch",
+    "query",
+    "command",
+    "form"
+  ],
+  "bin": {
+    "sveltekit-openapi-remote": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime/index.d.ts",
+      "import": "./dist/runtime/index.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "pnpm run build && pnpm test"
+  },
+  "peerDependencies": {
+    "@sveltejs/kit": "^2.0.0",
+    "openapi-fetch": "^0.13.0",
+    "openapi-typescript": "^7.0.0",
+    "zod": "^3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "openapi-typescript": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "openapi-typescript": "^7.13.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.1"
+  },
+  "dependencies": {
+    "chalk": "^5.6.2",
+    "commander": "^14.0.3",
+    "ora": "^9.3.0"
+  }
+}
