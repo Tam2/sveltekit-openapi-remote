@@ -96,6 +96,9 @@ jobs:
 
       - run: pnpm run build
 
+      # Ensure the latest npm is installed
+      - run: npm install -g npm@latest
+
       - name: Publish to npm
         env:
           IS_PRERELEASE: ${{ needs.preflight.outputs.is_prerelease }}
