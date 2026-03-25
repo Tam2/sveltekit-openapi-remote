@@ -325,6 +325,90 @@ describe('Integration: Petstore OpenAPI spec', () => {
     });
   });
 
+  describe('TypeScript compilation of generated files', () => {
+    let tmpDir: string;
+
+    beforeAll(() => {
+      tmpDir = path.join(os.tmpdir(), `petstore-typecheck-${Date.now()}`);
+
+      // Generate remote files from petstore spec
+      const cliPath = path.join(import.meta.dirname, '..', 'dist', 'cli.js');
+      execFileSync('node', [
+        cliPath, 'generate',
+        '--spec', PETSTORE_JSON,
+        '--output', tmpDir,
+        '--client', '$lib/api/remote',
+      ], { encoding: 'utf-8' });
+
+      // Create handler stubs for $lib/api/remote
+      fs.mkdirSync(path.join(tmpDir, 'lib', 'api'), { recursive: true });
+      fs.writeFileSync(path.join(tmpDir, 'lib', 'api', 'remote.ts'), [
+        'export declare function handleGetQuery(path: string, params: any): Promise<any>;',
+        'export declare function handlePostCommand(path: string, body: any): Promise<any>;',
+        'export declare function handlePatchCommand(path: string, input: any): Promise<any>;',
+        'export declare function handlePutCommand(path: string, input: any): Promise<any>;',
+        'export declare function handleDeleteCommand(path: string, params: any): Promise<any>;',
+        'export declare function handlePostForm(path: string, body: any): Promise<any>;',
+        'export declare function handlePatchForm(path: string, input: any): Promise<any>;',
+        'export declare function handlePutForm(path: string, input: any): Promise<any>;',
+        'export declare function handleDeleteForm(path: string, params: any): Promise<any>;',
+      ].join('\n'));
+
+      // Create tsconfig that resolves SvelteKit, zod, and project modules
+      const projectRoot = path.join(import.meta.dirname, '..');
+      const tsconfig = {
+        compilerOptions: {
+          strict: true,
+          noEmit: true,
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          target: 'ESNext',
+          skipLibCheck: true,
+          paths: {
+            '$app/server': [path.join(projectRoot, 'node_modules', '@sveltejs', 'kit', 'types', 'index.d.ts')],
+            '$lib/api/remote': ['./lib/api/remote.ts'],
+            'sveltekit-openapi-remote': [path.join(projectRoot, 'src', 'index.ts')],
+            'zod': [path.join(projectRoot, 'node_modules', 'zod', 'v4', 'classic', 'index.d.ts')],
+          },
+          baseUrl: '.',
+        },
+        include: ['./**/*.remote.ts'],
+      };
+      fs.writeFileSync(path.join(tmpDir, 'tsconfig.json'), JSON.stringify(tsconfig, null, 2));
+    });
+
+    afterAll(() => {
+      if (fs.existsSync(tmpDir)) {
+        fs.rmSync(tmpDir, { recursive: true });
+      }
+    });
+
+    it('generated remote files pass TypeScript type checking', () => {
+      const tscPath = path.join(import.meta.dirname, '..', 'node_modules', '.bin', 'tsc');
+      const result = execFileSync(tscPath, [
+        '--project', path.join(tmpDir, 'tsconfig.json'),
+        '--noEmit',
+      ], { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+
+      // If we reach here, tsc exited with code 0 — no type errors
+      expect(result).toBe('');
+    });
+
+    it('generated files contain form() with pipe pattern for RemoteFormInput compatibility', () => {
+      const remoteFiles = fs.readdirSync(tmpDir).filter(f => f.endsWith('.remote.ts'));
+      const allContent = remoteFiles.map(f =>
+        fs.readFileSync(path.join(tmpDir, f), 'utf-8')
+      ).join('\n');
+
+      // form() calls should use z.record().pipe() pattern, not bare z.custom()
+      const formCalls = allContent.match(/form\(\n\t[^\n]+/g) || [];
+      expect(formCalls.length).toBeGreaterThan(0);
+      for (const call of formCalls) {
+        expect(call).toContain('z.record(z.string(), z.any()).pipe(');
+      }
+    });
+  });
+
   describe('CLI error cases', () => {
     it('fails with helpful message for missing types file', () => {
       const cliPath = path.join(import.meta.dirname, '..', 'dist', 'cli.js');

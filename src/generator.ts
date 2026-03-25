@@ -113,13 +113,18 @@ export function pathToFunctionName(
   const segments = pathStr.replace(/^\//, '').split('/');
 
   const parts = segments.map((segment, index) => {
-    if (segment.startsWith('{') && segment.endsWith('}')) {
-      const param = segment.slice(1, -1);
-      return 'By' + param.charAt(0).toUpperCase() + param.slice(1);
+    // Handle path parameters embedded in segments (e.g. "{id}.ical")
+    if (segment.includes('{')) {
+      return segment.replace(/\{([^}]+)\}/g, (_, param) => {
+        return 'By' + param.charAt(0).toUpperCase() + param.slice(1);
+      }).split(/[^a-zA-Z0-9]/).filter(Boolean).map((word, i) => {
+        if (index === 0 && i === 0) return word;
+        return word.charAt(0).toUpperCase() + word.slice(1);
+      }).join('');
     }
 
-    const words = segment.split('-');
-    return words
+    const words = segment.split(/[^a-zA-Z0-9]/);
+    return words.filter(Boolean)
       .map((word, i) => {
         if (index === 0 && i === 0) {
           return word;
@@ -220,7 +225,7 @@ function generateFunctionCode(
     const commandName = pathToFunctionName(pathStr, method, 'Command');
     const formName = pathToFunctionName(pathStr, method, 'Form');
     codes.push(`export const ${commandName} = command(\n\tz.custom<GetParameters<paths, '${pathStr}', 'delete'>>(),\n\tasync (params) => handleDeleteCommand('${pathStr}', params)\n);`);
-    codes.push(`export const ${formName} = form(\n\tz.custom<GetParameters<paths, '${pathStr}', 'delete'> & Record<string, any>>(),\n\tasync (params) => handleDeleteForm('${pathStr}', params)\n);`);
+    codes.push(`export const ${formName} = form(\n\tz.record(z.string(), z.any()).pipe(z.custom<GetParameters<paths, '${pathStr}', 'delete'>>()),\n\tasync (params) => handleDeleteForm('${pathStr}', params)\n);`);
   } else if (info.hasParams) {
     const commandName = pathToFunctionName(pathStr, method, 'Command');
     const formName = pathToFunctionName(pathStr, method, 'Form');
@@ -228,7 +233,7 @@ function generateFunctionCode(
     const commandHandler = `handle${Method}Command`;
     const formHandler = `handle${Method}Form`;
     codes.push(`export const ${commandName} = command(\n\tz.object({\n\t\tpath: z.custom<GetParameters<paths, '${pathStr}', '${method}'>['path']>(),\n\t\tbody: z.custom<GetRequestBody<paths, '${pathStr}', '${method}'>>()\n\t}),\n\tasync (input) => ${commandHandler}('${pathStr}', input)\n);`);
-    codes.push(`export const ${formName} = form(\n\tz.object({\n\t\tpath: z.custom<GetParameters<paths, '${pathStr}', '${method}'>['path']>(),\n\t\tbody: z.custom<GetRequestBody<paths, '${pathStr}', '${method}'>>()\n\t}) as unknown as z.ZodType<{ path: GetParameters<paths, '${pathStr}', '${method}'>['path']; body: GetRequestBody<paths, '${pathStr}', '${method}'> } & Record<string, any>>,\n\tasync (input) => ${formHandler}('${pathStr}', input)\n);`);
+    codes.push(`export const ${formName} = form(\n\tz.record(z.string(), z.any()).pipe(z.custom<{ path: GetParameters<paths, '${pathStr}', '${method}'>['path']; body: GetRequestBody<paths, '${pathStr}', '${method}'> }>()),\n\tasync (input) => ${formHandler}('${pathStr}', input)\n);`);
   } else {
     const commandName = pathToFunctionName(pathStr, method, 'Command');
     const formName = pathToFunctionName(pathStr, method, 'Form');
@@ -236,7 +241,7 @@ function generateFunctionCode(
     const commandHandler = `handle${Method}Command`;
     const formHandler = `handle${Method}Form`;
     codes.push(`export const ${commandName} = command(\n\tz.custom<GetRequestBody<paths, '${pathStr}', '${method}'>>(),\n\tasync (body) => ${commandHandler}('${pathStr}', body)\n);`);
-    codes.push(`export const ${formName} = form(\n\tz.custom<GetRequestBody<paths, '${pathStr}', '${method}'> & Record<string, any>>(),\n\tasync (body) => ${formHandler}('${pathStr}', body)\n);`);
+    codes.push(`export const ${formName} = form(\n\tz.record(z.string(), z.any()).pipe(z.custom<GetRequestBody<paths, '${pathStr}', '${method}'>>()),\n\tasync (body) => ${formHandler}('${pathStr}', body)\n);`);
   }
 
   return codes;

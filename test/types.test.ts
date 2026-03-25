@@ -30,24 +30,6 @@ interface MockPaths {
         200: { content: { 'application/json': { id: number; name: string } } };
       };
     };
-    delete: {
-      parameters: {
-        path: { id: number };
-      };
-      responses: {
-        200: { content: { 'application/json': { success: boolean } } };
-      };
-    };
-  };
-  '/users/{id}': {
-    get: {
-      parameters: {
-        path: { id: number };
-      };
-      responses: {
-        200: { content: { 'application/json': { id: number; name: string } } };
-      };
-    };
     patch: {
       parameters: {
         path: { id: number };
@@ -140,46 +122,44 @@ type FormSchema = StandardSchemaV1<RemoteFormInput, Record<string, any>>;
 // Type alias matching what query()/command() require: StandardSchemaV1 (unconstrained)
 type CommandSchema = StandardSchemaV1;
 
+// Helper used in generated form() schemas: z.record(z.string(), z.any()) provides
+// a RemoteFormInput-compatible input type, piped to z.custom<T>() for typed output.
+const formInput = () => z.record(z.string(), z.any());
+
 describe('SvelteKit form() schema compatibility', () => {
-  // DELETE: params-only with z.custom
-  it('DELETE form schema: GetParameters & Record<string, any>', () => {
-    const schema = z.custom<GetParameters<MockPaths, '/users/{id}', 'delete'> & Record<string, any>>();
+  // DELETE: params-only — pipe from record to typed custom
+  it('DELETE form schema: pipe to GetParameters', () => {
+    const schema = formInput().pipe(z.custom<GetParameters<MockPaths, '/users/{id}', 'delete'>>());
     expectTypeOf(schema).toMatchTypeOf<FormSchema>();
   });
 
-  // POST body-only (no path params) with z.custom
-  it('POST body-only form schema: GetRequestBody & Record<string, any>', () => {
-    const schema = z.custom<GetRequestBody<MockPaths, '/users', 'post'> & Record<string, any>>();
+  // POST body-only (no path params) — pipe from record to typed custom
+  it('POST body-only form schema: pipe to GetRequestBody', () => {
+    const schema = formInput().pipe(z.custom<GetRequestBody<MockPaths, '/users', 'post'>>());
     expectTypeOf(schema).toMatchTypeOf<FormSchema>();
   });
 
-  // PATCH with path params + body: z.object cast pattern
-  it('PATCH form schema with path + body (z.object cast)', () => {
-    type Schema = { path: GetParameters<MockPaths, '/users/{id}', 'patch'>['path']; body: GetRequestBody<MockPaths, '/users/{id}', 'patch'> } & Record<string, any>;
-    const schema = z.object({
-      path: z.custom<GetParameters<MockPaths, '/users/{id}', 'patch'>['path']>(),
-      body: z.custom<GetRequestBody<MockPaths, '/users/{id}', 'patch'>>(),
-    }) as unknown as z.ZodType<Schema>;
+  // PATCH with path params + body — pipe from record to typed custom with combined type
+  it('PATCH form schema with path + body', () => {
+    type PatchInput = { path: GetParameters<MockPaths, '/users/{id}', 'patch'>['path']; body: GetRequestBody<MockPaths, '/users/{id}', 'patch'> };
+    const schema = formInput().pipe(z.custom<PatchInput>());
     expectTypeOf(schema).toMatchTypeOf<FormSchema>();
   });
 
-  // PUT with path params + body: z.object cast pattern
-  it('PUT form schema with path + body (z.object cast)', () => {
-    type Schema = { path: GetParameters<MockPaths, '/users/{id}', 'put'>['path']; body: GetRequestBody<MockPaths, '/users/{id}', 'put'> } & Record<string, any>;
-    const schema = z.object({
-      path: z.custom<GetParameters<MockPaths, '/users/{id}', 'put'>['path']>(),
-      body: z.custom<GetRequestBody<MockPaths, '/users/{id}', 'put'>>(),
-    }) as unknown as z.ZodType<Schema>;
+  // PUT with path params + body — pipe from record to typed custom with combined type
+  it('PUT form schema with path + body', () => {
+    type PutInput = { path: GetParameters<MockPaths, '/users/{id}', 'put'>['path']; body: GetRequestBody<MockPaths, '/users/{id}', 'put'> };
+    const schema = formInput().pipe(z.custom<PutInput>());
     expectTypeOf(schema).toMatchTypeOf<FormSchema>();
   });
 
-  // Regression: bare types without Record<string, any> must NOT satisfy form()
-  it('bare GetParameters does NOT satisfy form() constraint', () => {
+  // Regression: bare z.custom without pipe does NOT satisfy form() in Zod v4
+  it('bare z.custom<GetParameters> does NOT satisfy form() constraint', () => {
     const schema = z.custom<GetParameters<MockPaths, '/users/{id}', 'delete'>>();
     expectTypeOf(schema).not.toMatchTypeOf<FormSchema>();
   });
 
-  it('bare GetRequestBody does NOT satisfy form() constraint', () => {
+  it('bare z.custom<GetRequestBody> does NOT satisfy form() constraint', () => {
     const schema = z.custom<GetRequestBody<MockPaths, '/users', 'post'>>();
     expectTypeOf(schema).not.toMatchTypeOf<FormSchema>();
   });
