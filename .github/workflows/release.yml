@@ -95,7 +95,6 @@ jobs:
 
       - name: Publish to npm
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           IS_PRERELEASE: ${{ needs.preflight.outputs.is_prerelease }}
         run: |
           if [[ "$IS_PRERELEASE" == "true" ]]; then
