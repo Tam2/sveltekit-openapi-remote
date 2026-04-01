@@ -1,11 +1,11 @@
 import { error as svelteError } from '@sveltejs/kit';
 
 interface OpenapiClient {
-  GET: (...args: any[]) => Promise<any>;
-  POST: (...args: any[]) => Promise<any>;
-  PATCH: (...args: any[]) => Promise<any>;
-  PUT: (...args: any[]) => Promise<any>;
-  DELETE: (...args: any[]) => Promise<any>;
+  GET: any;
+  POST: any;
+  PATCH: any;
+  PUT: any;
+  DELETE: any;
 }
 
 function handleResponse(response: any, error: any, data: any) {
