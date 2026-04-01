@@ -1,11 +1,11 @@
 import { error as svelteError } from '@sveltejs/kit';
 
 interface OpenapiClient {
-  GET: (path: string, options?: any) => Promise<any>;
-  POST: (path: string, options?: any) => Promise<any>;
-  PATCH: (path: string, options?: any) => Promise<any>;
-  PUT: (path: string, options?: any) => Promise<any>;
-  DELETE: (path: string, options?: any) => Promise<any>;
+  GET: (...args: any[]) => Promise<any>;
+  POST: (...args: any[]) => Promise<any>;
+  PATCH: (...args: any[]) => Promise<any>;
+  PUT: (...args: any[]) => Promise<any>;
+  DELETE: (...args: any[]) => Promise<any>;
 }
 
 function handleResponse(response: any, error: any, data: any) {
@@ -30,8 +30,13 @@ export function createRemoteHandlers(client: OpenapiClient) {
     return handleResponse(response, error, data);
   }
 
-  async function handlePostCommand(path: string, body: any) {
-    const { data, error, response } = await client.POST(path, { body });
+  async function handlePostCommand(path: string, input: any) {
+    const hasPath = input && typeof input === 'object' && 'path' in input;
+    const hasBody = input && typeof input === 'object' && 'body' in input;
+    const { data, error, response } = await client.POST(path, {
+      ...(hasPath && { params: { path: input.path } }),
+      body: hasBody ? input.body : input,
+    });
     return handleResponse(response, error, data);
   }
 
