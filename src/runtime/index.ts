@@ -24,6 +24,31 @@ function handleResponse(response: any, error: any, data: any) {
   return data;
 }
 
+/**
+ * Build the openapi-fetch request options from a command's single input argument.
+ *
+ * The generated command wrappers pass their input in one of these shapes, and this normalizes them:
+ *  - `{ path, body }`          → params.path + body            (path + body endpoint)
+ *  - `{ body }`                → body                          (no-path endpoint, wrapped)
+ *  - `{ path }` (no `body`)    → params.path, NO body          (path-only endpoint, no request body)
+ *  - a bare body `{ ...fields }` → body                        (no-path endpoint whose wrapper passes
+ *                                                                the body directly)
+ *  - `undefined`               → neither                       (no-path, no-body action endpoint)
+ *
+ * The key subtlety: a bare body has no `body` key, so it must be forwarded whole; but a path-only
+ * input (has `path`, no `body`) must NOT be forwarded as the body, or `{ path }` would be sent as
+ * the request body to a no-body endpoint.
+ */
+function buildRequestOptions(input: any) {
+  const hasPath = input && typeof input === 'object' && 'path' in input;
+  const hasBody = input && typeof input === 'object' && 'body' in input;
+  const body = hasBody ? input.body : hasPath ? undefined : input;
+  return {
+    ...(hasPath && { params: { path: input.path } }),
+    ...(body !== undefined && { body }),
+  };
+}
+
 export function createRemoteHandlers(client: OpenapiClient) {
   async function handleGetQuery(path: string, params: any) {
     const { data, error, response } = await client.GET(path, { params });
@@ -31,36 +56,17 @@ export function createRemoteHandlers(client: OpenapiClient) {
   }
 
   async function handlePostCommand(path: string, input: any) {
-    const hasPath = input && typeof input === 'object' && 'path' in input;
-    const hasBody = input && typeof input === 'object' && 'body' in input;
-    const { data, error, response } = await client.POST(path, {
-      ...(hasPath && { params: { path: input.path } }),
-      body: hasBody ? input.body : input,
-    });
+    const { data, error, response } = await client.POST(path, buildRequestOptions(input));
     return handleResponse(response, error, data);
   }
 
   async function handlePatchCommand(path: string, input: any) {
-    const hasPath = input && typeof input === 'object' && 'path' in input;
-    const hasBody = input && typeof input === 'object' && 'body' in input;
-    // For a no-path endpoint the generated wrapper passes the body directly (no `body` key), so fall
-    // back to the whole input as the body — matching handlePostCommand. Without this, a bare body was
-    // silently dropped, sending an empty PATCH.
-    const { data, error, response } = await client.PATCH(path, {
-      ...(hasPath && { params: { path: input.path } }),
-      body: hasBody ? input.body : input,
-    });
+    const { data, error, response } = await client.PATCH(path, buildRequestOptions(input));
     return handleResponse(response, error, data);
   }
 
   async function handlePutCommand(path: string, input: any) {
-    const hasPath = input && typeof input === 'object' && 'path' in input;
-    const hasBody = input && typeof input === 'object' && 'body' in input;
-    // Same bare-body fallback as handlePostCommand/handlePatchCommand.
-    const { data, error, response } = await client.PUT(path, {
-      ...(hasPath && { params: { path: input.path } }),
-      body: hasBody ? input.body : input,
-    });
+    const { data, error, response } = await client.PUT(path, buildRequestOptions(input));
     return handleResponse(response, error, data);
   }
 

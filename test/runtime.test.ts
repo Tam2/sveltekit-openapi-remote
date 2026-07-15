@@ -81,6 +81,33 @@ describe('createRemoteHandlers', () => {
       expect(client.POST).toHaveBeenCalledWith('/users', { body: { name: 'Test' } });
       expect(result).toEqual({ id: 1, name: 'Test' });
     });
+
+    it('sends params but NO body for a path-only input (no request body)', async () => {
+      const client = createMockClient();
+      client.POST.mockResolvedValue({
+        data: { ok: true },
+        error: undefined,
+        response: { ok: true, status: 200 },
+      });
+      const { handlePostCommand } = createRemoteHandlers(client as any);
+      await handlePostCommand('/invitations/{id}/resend', { path: { id: 'abc' } });
+      // Must NOT forward `{ path }` as the request body to a no-body endpoint.
+      expect(client.POST).toHaveBeenCalledWith('/invitations/{id}/resend', {
+        params: { path: { id: 'abc' } },
+      });
+    });
+
+    it('sends neither params nor body for a no-arg action (undefined input)', async () => {
+      const client = createMockClient();
+      client.POST.mockResolvedValue({
+        data: { ok: true },
+        error: undefined,
+        response: { ok: true, status: 200 },
+      });
+      const { handlePostCommand } = createRemoteHandlers(client as any);
+      await handlePostCommand('/billing/reactivate', undefined);
+      expect(client.POST).toHaveBeenCalledWith('/billing/reactivate', {});
+    });
   });
 
   describe('handlePatchCommand', () => {
@@ -133,6 +160,20 @@ describe('createRemoteHandlers', () => {
         body: { firstName: 'Tam', lastName: 'M' },
       });
       expect(result).toEqual({ updated: true });
+    });
+
+    it('sends params but NO body for a path-only input (no request body)', async () => {
+      const client = createMockClient();
+      client.PATCH.mockResolvedValue({
+        data: { ok: true },
+        error: undefined,
+        response: { ok: true, status: 200 },
+      });
+      const { handlePatchCommand } = createRemoteHandlers(client as any);
+      await handlePatchCommand('/things/{id}/toggle', { path: { id: 7 } });
+      expect(client.PATCH).toHaveBeenCalledWith('/things/{id}/toggle', {
+        params: { path: { id: 7 } },
+      });
     });
   });
 
