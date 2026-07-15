@@ -133,6 +133,20 @@ describe('createRemoteHandlers', () => {
       await handlePostCommand('/billing/reactivate', undefined);
       expect(client.POST).toHaveBeenCalledWith('/billing/reactivate', {});
     });
+
+    it('is callable with only a path (no-arg action command shape)', async () => {
+      // The generator emits `command(z.void(), async () => handlePostCommand(path))` for no-path,
+      // no-body endpoints, i.e. a 1-argument call. `input` is optional so that type-checks.
+      const client = createMockClient();
+      client.POST.mockResolvedValue({
+        data: { ok: true },
+        error: undefined,
+        response: { ok: true, status: 200 },
+      });
+      const { handlePostCommand } = createRemoteHandlers(client as any);
+      await handlePostCommand('/billing/reactivate');
+      expect(client.POST).toHaveBeenCalledWith('/billing/reactivate', {});
+    });
   });
 
   describe('handlePatchCommand', () => {

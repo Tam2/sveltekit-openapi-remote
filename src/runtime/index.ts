@@ -61,17 +61,20 @@ export function createRemoteHandlers(client: OpenapiClient) {
     return handleResponse(response, error, data);
   }
 
-  async function handlePostCommand(path: string, input: any) {
+  // `input` is optional so the no-argument action commands the generator emits for endpoints with
+  // no path params and no request body — `command(z.void(), async () => handlePostCommand(path))` —
+  // type-check (buildRequestOptions(undefined) yields no params and no body).
+  async function handlePostCommand(path: string, input?: any) {
     const { data, error, response } = await client.POST(path, buildRequestOptions(input));
     return handleResponse(response, error, data);
   }
 
-  async function handlePatchCommand(path: string, input: any) {
+  async function handlePatchCommand(path: string, input?: any) {
     const { data, error, response } = await client.PATCH(path, buildRequestOptions(input));
     return handleResponse(response, error, data);
   }
 
-  async function handlePutCommand(path: string, input: any) {
+  async function handlePutCommand(path: string, input?: any) {
     const { data, error, response } = await client.PUT(path, buildRequestOptions(input));
     return handleResponse(response, error, data);
   }
