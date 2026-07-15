@@ -1,6 +1,6 @@
 {
   "name": "sveltekit-openapi-remote",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Generate SvelteKit remote functions directly from OpenAPI/Swagger specs.",
   "type": "module",
   "license": "MIT",
