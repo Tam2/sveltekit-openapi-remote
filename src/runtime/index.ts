@@ -13,13 +13,19 @@ function handleResponse(response: any, error: any, data: any) {
     throw svelteError(503, 'Network error: no response from service');
   }
   if (error) {
+    // Use the real HTTP status from the response (works for any API); fall back to 500 only if it's
+    // somehow absent. The error body's `message`, when present, gives a better message than a generic.
     throw svelteError(
-      (error as any).statusCode ?? 500,
-      (error as any).message ?? 'An error occurred',
+      response.status ?? 500,
+      (error as { message?: string })?.message ?? 'An error occurred',
     );
   }
-  if (!data) {
-    throw svelteError(404, 'Not found');
+  if (data === undefined || data === null) {
+    // A successful (2xx) response may legitimately carry no body — 204 No Content, or a void /
+    // action endpoint (e.g. "resend invitation"). Only treat missing data as an error when the
+    // response itself was not ok; otherwise return it so the caller sees success, not a false 404.
+    if (response.ok) return data;
+    throw svelteError(response.status ?? 404, 'Not found');
   }
   return data;
 }
