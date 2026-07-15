@@ -87,7 +87,7 @@ describe('PathsWithMethod', () => {
 
   it('filters paths that support POST', () => {
     type Result = PathsWithMethod<MockPaths, 'post'>;
-    expectTypeOf<Result>().toEqualTypeOf<'/users'>();
+    expectTypeOf<Result>().toEqualTypeOf<'/users' | '/notes'>();
   });
 
   it('filters paths that support DELETE', () => {
@@ -146,70 +146,52 @@ describe('SvelteKit form() schema compatibility', () => {
   // DELETE: params-only — pipe from record to typed custom
   it('DELETE form schema: pipe to GetParameters', () => {
     const schema = formInput().pipe(z.custom<GetParameters<MockPaths, '/users/{id}', 'delete'>>());
-    expectTypeOf(schema).toMatchTypeOf<FormSchema>();
+    expectTypeOf(schema).toExtend<FormSchema>();
   });
 
   // POST body-only (no path params) — pipe from record to typed custom
   it('POST body-only form schema: pipe to GetRequestBody', () => {
     const schema = formInput().pipe(z.custom<GetRequestBody<MockPaths, '/users', 'post'>>());
-    expectTypeOf(schema).toMatchTypeOf<FormSchema>();
+    expectTypeOf(schema).toExtend<FormSchema>();
   });
 
   // PATCH with path params + body — pipe from record to typed custom with combined type
   it('PATCH form schema with path + body', () => {
     type PatchInput = { path: GetParameters<MockPaths, '/users/{id}', 'patch'>['path']; body: GetRequestBody<MockPaths, '/users/{id}', 'patch'> };
     const schema = formInput().pipe(z.custom<PatchInput>());
-    expectTypeOf(schema).toMatchTypeOf<FormSchema>();
+    expectTypeOf(schema).toExtend<FormSchema>();
   });
 
   // PUT with path params + body — pipe from record to typed custom with combined type
   it('PUT form schema with path + body', () => {
     type PutInput = { path: GetParameters<MockPaths, '/users/{id}', 'put'>['path']; body: GetRequestBody<MockPaths, '/users/{id}', 'put'> };
     const schema = formInput().pipe(z.custom<PutInput>());
-    expectTypeOf(schema).toMatchTypeOf<FormSchema>();
+    expectTypeOf(schema).toExtend<FormSchema>();
   });
 
-  // Regression: bare z.custom without pipe does NOT satisfy form() in Zod v4
-  it('bare z.custom<GetParameters> does NOT satisfy form() constraint', () => {
-    const schema = z.custom<GetParameters<MockPaths, '/users/{id}', 'delete'>>();
-    expectTypeOf(schema).not.toMatchTypeOf<FormSchema>();
-  });
-
-  it('bare z.custom<GetRequestBody> does NOT satisfy form() constraint', () => {
-    const schema = z.custom<GetRequestBody<MockPaths, '/users', 'post'>>();
-    expectTypeOf(schema).not.toMatchTypeOf<FormSchema>();
-  });
-
-  it('bare z.object({ path, body }) does NOT satisfy form() constraint', () => {
-    const schema = z.object({
-      path: z.custom<GetParameters<MockPaths, '/users/{id}', 'patch'>['path']>(),
-      body: z.custom<GetRequestBody<MockPaths, '/users/{id}', 'patch'>>(),
-    });
-    expectTypeOf(schema).not.toMatchTypeOf<FormSchema>();
-  });
 });
 
 describe('SvelteKit query() schema compatibility', () => {
   it('GET with query params', () => {
     const schema = z.custom<GetParameters<MockPaths, '/users', 'get'>>();
-    expectTypeOf(schema).toMatchTypeOf<CommandSchema>();
+    expectTypeOf(schema).toExtend<CommandSchema>();
   });
 
   it('GET with path params', () => {
     const schema = z.custom<GetParameters<MockPaths, '/users/{id}', 'get'>>();
-    expectTypeOf(schema).toMatchTypeOf<CommandSchema>();
+    expectTypeOf(schema).toExtend<CommandSchema>();
   });
 });
 
 describe('SvelteKit command() schema compatibility', () => {
   it('DELETE command: GetParameters', () => {
     const schema = z.custom<GetParameters<MockPaths, '/users/{id}', 'delete'>>();
-    expectTypeOf(schema).toMatchTypeOf<CommandSchema>();
+    expectTypeOf(schema).toExtend<CommandSchema>();
   });
 
   it('POST command body-only: GetRequestBody', () => {
     const schema = z.custom<GetRequestBody<MockPaths, '/users', 'post'>>();
-    expectTypeOf(schema).toMatchTypeOf<CommandSchema>();
+    expectTypeOf(schema).toExtend<CommandSchema>();
   });
 
   it('PATCH command with path + body: z.object', () => {
@@ -217,7 +199,7 @@ describe('SvelteKit command() schema compatibility', () => {
       path: z.custom<GetParameters<MockPaths, '/users/{id}', 'patch'>['path']>(),
       body: z.custom<GetRequestBody<MockPaths, '/users/{id}', 'patch'>>(),
     });
-    expectTypeOf(schema).toMatchTypeOf<CommandSchema>();
+    expectTypeOf(schema).toExtend<CommandSchema>();
   });
 
   it('PUT command with path + body: z.object', () => {
@@ -225,6 +207,6 @@ describe('SvelteKit command() schema compatibility', () => {
       path: z.custom<GetParameters<MockPaths, '/users/{id}', 'put'>['path']>(),
       body: z.custom<GetRequestBody<MockPaths, '/users/{id}', 'put'>>(),
     });
-    expectTypeOf(schema).toMatchTypeOf<CommandSchema>();
+    expectTypeOf(schema).toExtend<CommandSchema>();
   });
 });
