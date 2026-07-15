@@ -43,9 +43,12 @@ export function createRemoteHandlers(client: OpenapiClient) {
   async function handlePatchCommand(path: string, input: any) {
     const hasPath = input && typeof input === 'object' && 'path' in input;
     const hasBody = input && typeof input === 'object' && 'body' in input;
+    // For a no-path endpoint the generated wrapper passes the body directly (no `body` key), so fall
+    // back to the whole input as the body — matching handlePostCommand. Without this, a bare body was
+    // silently dropped, sending an empty PATCH.
     const { data, error, response } = await client.PATCH(path, {
       ...(hasPath && { params: { path: input.path } }),
-      ...(hasBody && { body: input.body }),
+      body: hasBody ? input.body : input,
     });
     return handleResponse(response, error, data);
   }
@@ -53,9 +56,10 @@ export function createRemoteHandlers(client: OpenapiClient) {
   async function handlePutCommand(path: string, input: any) {
     const hasPath = input && typeof input === 'object' && 'path' in input;
     const hasBody = input && typeof input === 'object' && 'body' in input;
+    // Same bare-body fallback as handlePostCommand/handlePatchCommand.
     const { data, error, response } = await client.PUT(path, {
       ...(hasPath && { params: { path: input.path } }),
-      ...(hasBody && { body: input.body }),
+      body: hasBody ? input.body : input,
     });
     return handleResponse(response, error, data);
   }

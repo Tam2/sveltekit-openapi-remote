@@ -117,6 +117,23 @@ describe('createRemoteHandlers', () => {
       });
       expect(result).toEqual({ updated: true });
     });
+
+    it('treats a bare body (no path/body key) as the request body, like POST', async () => {
+      // A no-path endpoint's generated wrapper passes the body directly (e.g. patchUsersCommand({...})).
+      // Regression: handlePatchCommand used to only forward input.body, silently dropping a bare body.
+      const client = createMockClient();
+      client.PATCH.mockResolvedValue({
+        data: { updated: true },
+        error: undefined,
+        response: { ok: true, status: 200 },
+      });
+      const { handlePatchCommand } = createRemoteHandlers(client as any);
+      const result = await handlePatchCommand('/users', { firstName: 'Tam', lastName: 'M' });
+      expect(client.PATCH).toHaveBeenCalledWith('/users', {
+        body: { firstName: 'Tam', lastName: 'M' },
+      });
+      expect(result).toEqual({ updated: true });
+    });
   });
 
   describe('handlePutCommand', () => {
@@ -137,6 +154,21 @@ describe('createRemoteHandlers', () => {
         body: { name: 'Replaced' },
       });
       expect(result).toEqual({ id: 1, name: 'Replaced' });
+    });
+
+    it('treats a bare body (no path/body key) as the request body, like POST', async () => {
+      const client = createMockClient();
+      client.PUT.mockResolvedValue({
+        data: { replaced: true },
+        error: undefined,
+        response: { ok: true, status: 200 },
+      });
+      const { handlePutCommand } = createRemoteHandlers(client as any);
+      const result = await handlePutCommand('/settings', { theme: 'dark' });
+      expect(client.PUT).toHaveBeenCalledWith('/settings', {
+        body: { theme: 'dark' },
+      });
+      expect(result).toEqual({ replaced: true });
     });
   });
 
