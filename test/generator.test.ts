@@ -44,6 +44,35 @@ describe('extractPaths', () => {
     expect(() => extractPaths('export interface foo {}')).toThrow('Could not find paths interface');
   });
 
+  it('detects request body presence from the operations interface', () => {
+    const dts = `
+export interface paths {
+    "/invitations/{id}/resend": {
+        post: operations["resend"];
+    };
+    "/users": {
+        post: operations["createUser"];
+    };
+}
+export interface operations {
+    resend: {
+        parameters: { path: { id: string } };
+        requestBody?: never;
+        responses: { 200: { content: { "application/json": { ok: boolean } } } };
+    };
+    createUser: {
+        requestBody: { content: { "application/json": { name: string } } };
+        responses: { 201: { content: { "application/json": { id: string } } } };
+    };
+}
+`;
+    const paths = extractPaths(dts);
+    const resend = paths.find(p => p.path === '/invitations/{id}/resend');
+    const users = paths.find(p => p.path === '/users');
+    expect(resend!.methods[0].hasBody).toBe(false);
+    expect(users!.methods[0].hasBody).toBe(true);
+  });
+
   it('extracts paths with inline type definitions (not operations[])', () => {
     const inlineDts = `
 export interface paths {
@@ -155,6 +184,29 @@ describe('generateFileContent', () => {
     expect(content).toContain('z.object({');
     expect(content).toContain("z.custom<GetParameters<paths, '/users/{id}', 'patch'>['path']>()");
     expect(content).toContain("z.custom<GetRequestBody<paths, '/users/{id}', 'patch'>>()");
+  });
+
+  it('omits the body field for a path endpoint with no request body', () => {
+    const paths: PathInfo[] = [{
+      path: '/invitations/{id}/resend',
+      methods: [{ method: 'post', hasParams: true, hasBody: false, hasQuery: false }],
+    }];
+    const content = generateFileContent(paths, '$lib/api/remote');
+    expect(content).toContain("z.custom<GetParameters<paths, '/invitations/{id}/resend', 'post'>['path']>()");
+    // No body field, and GetRequestBody is not needed/imported.
+    expect(content).not.toContain('body: z.custom');
+    expect(content).not.toContain('GetRequestBody');
+  });
+
+  it('generates a no-argument command for a no-path no-body action', () => {
+    const paths: PathInfo[] = [{
+      path: '/billing/reactivate',
+      methods: [{ method: 'post', hasParams: false, hasBody: false, hasQuery: false }],
+    }];
+    const content = generateFileContent(paths, '$lib/api/remote');
+    expect(content).toContain('export const postBillingReactivateCommand = command(');
+    expect(content).toContain('z.void()');
+    expect(content).not.toContain('GetRequestBody');
   });
 
   it('generates DELETE command and form', () => {

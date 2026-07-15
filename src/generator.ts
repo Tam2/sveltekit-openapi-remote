@@ -54,12 +54,58 @@ function extractPathBlock(content: string, startIndex: number): string | null {
   return content.slice(startIndex, pos);
 }
 
+/**
+ * Extract the `{...}` block for a named member of an interface, e.g. an entry of `operations`.
+ * Handles both bare identifier keys (`updatePet: {`) and quoted keys (`"activity/star-repo": {`) —
+ * openapi-typescript quotes operationIds that contain non-identifier characters (`/`, `-`, `.`).
+ */
+function extractNamedBlock(content: string, name: string): string | null {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`(?:^|[\\s{;,])["']?${escaped}["']?\\s*:\\s*\\{`, 'm');
+  const m = re.exec(content);
+  if (!m) return null;
+  const braceIdx = content.indexOf('{', m.index);
+  let depth = 1;
+  let pos = braceIdx + 1;
+  while (pos < content.length && depth > 0) {
+    if (content[pos] === '{') depth++;
+    else if (content[pos] === '}') depth--;
+    pos++;
+  }
+  return content.slice(braceIdx, pos);
+}
+
+/** A block has a request body if `requestBody` maps to an object; `requestBody?: never`/absent => no body. */
+function blockHasRequestBody(block: string): boolean {
+  return /requestBody\s*\??\s*:\s*\{/.test(block);
+}
+
+/**
+ * Whether an operation actually declares a request body. Resolves a `<method>: operations["Name"]`
+ * reference against the `operations` interface, or reads an inline `<method>: { ... }` block.
+ * Defaults to `true` when the operation can't be resolved, so a real body is never dropped.
+ */
+function operationHasBody(pathBlock: string, method: string, operationsContent: string): boolean {
+  const ref = new RegExp(`\\b${method}\\s*:\\s*operations\\[["']([^"']+)["']\\]`).exec(pathBlock);
+  if (ref) {
+    const opBlock = extractNamedBlock(operationsContent, ref[1]);
+    return opBlock ? blockHasRequestBody(opBlock) : true;
+  }
+  const inline = new RegExp(`\\b${method}\\s*:\\s*\\{`).exec(pathBlock);
+  if (inline) {
+    const inlineBlock = extractPathBlock(pathBlock, inline.index);
+    return inlineBlock ? blockHasRequestBody(inlineBlock) : true;
+  }
+  return true;
+}
+
 export function extractPaths(apiTypesContent: string): PathInfo[] {
   const pathsContent = extractInterfaceBody(apiTypesContent, 'paths');
   if (!pathsContent) {
     throw new Error('Could not find paths interface in api.d.ts');
   }
 
+  const operationsContent = extractInterfaceBody(apiTypesContent, 'operations') ?? '';
   const pathKeyRegex = /"(\/[^"]*)":\s*\{/g;
   const paths: PathInfo[] = [];
 
@@ -84,7 +130,10 @@ export function extractPaths(apiTypesContent: string): PathInfo[] {
     for (const { method, regex } of methodChecks) {
       if (regex.test(pathBlock)) {
         const hasParams = pathStr.includes('{');
-        const hasBody = method !== 'get' && method !== 'delete';
+        const hasBody =
+          method !== 'get' &&
+          method !== 'delete' &&
+          operationHasBody(pathBlock, method, operationsContent);
         const hasQuery = method === 'get';
         methods.push({ method, hasParams, hasBody, hasQuery });
       }
@@ -177,7 +226,7 @@ export function generateFileContent(paths: PathInfo[], clientImport: string): st
         allHandlers.add(`handle${Method}Command`);
         allHandlers.add(`handle${Method}Form`);
         if (methodInfo.hasParams) allTypes.add('GetParameters');
-        allTypes.add('GetRequestBody');
+        if (methodInfo.hasBody) allTypes.add('GetRequestBody');
       }
     }
   }
@@ -226,22 +275,30 @@ function generateFunctionCode(
     const formName = pathToFunctionName(pathStr, method, 'Form');
     codes.push(`export const ${commandName} = command(\n\tz.custom<GetParameters<paths, '${pathStr}', 'delete'>>(),\n\tasync (params) => handleDeleteCommand('${pathStr}', params)\n);`);
     codes.push(`export const ${formName} = form(\n\tz.record(z.string(), z.any()).pipe(z.custom<GetParameters<paths, '${pathStr}', 'delete'>>()),\n\tasync (params) => handleDeleteForm('${pathStr}', params)\n);`);
-  } else if (info.hasParams) {
-    const commandName = pathToFunctionName(pathStr, method, 'Command');
-    const formName = pathToFunctionName(pathStr, method, 'Form');
-    const Method = method.charAt(0).toUpperCase() + method.slice(1);
-    const commandHandler = `handle${Method}Command`;
-    const formHandler = `handle${Method}Form`;
-    codes.push(`export const ${commandName} = command(\n\tz.object({\n\t\tpath: z.custom<GetParameters<paths, '${pathStr}', '${method}'>['path']>(),\n\t\tbody: z.custom<GetRequestBody<paths, '${pathStr}', '${method}'>>()\n\t}),\n\tasync (input) => ${commandHandler}('${pathStr}', input)\n);`);
-    codes.push(`export const ${formName} = form(\n\tz.record(z.string(), z.any()).pipe(z.custom<{ path: GetParameters<paths, '${pathStr}', '${method}'>['path']; body: GetRequestBody<paths, '${pathStr}', '${method}'> }>()),\n\tasync (input) => ${formHandler}('${pathStr}', input)\n);`);
   } else {
     const commandName = pathToFunctionName(pathStr, method, 'Command');
     const formName = pathToFunctionName(pathStr, method, 'Form');
     const Method = method.charAt(0).toUpperCase() + method.slice(1);
     const commandHandler = `handle${Method}Command`;
     const formHandler = `handle${Method}Form`;
-    codes.push(`export const ${commandName} = command(\n\tz.custom<GetRequestBody<paths, '${pathStr}', '${method}'>>(),\n\tasync (body) => ${commandHandler}('${pathStr}', body)\n);`);
-    codes.push(`export const ${formName} = form(\n\tz.record(z.string(), z.any()).pipe(z.custom<GetRequestBody<paths, '${pathStr}', '${method}'>>()),\n\tasync (body) => ${formHandler}('${pathStr}', body)\n);`);
+    const pathType = `GetParameters<paths, '${pathStr}', '${method}'>['path']`;
+    const bodyType = `GetRequestBody<paths, '${pathStr}', '${method}'>`;
+
+    if (info.hasParams && info.hasBody) {
+      codes.push(`export const ${commandName} = command(\n\tz.object({\n\t\tpath: z.custom<${pathType}>(),\n\t\tbody: z.custom<${bodyType}>()\n\t}),\n\tasync (input) => ${commandHandler}('${pathStr}', input)\n);`);
+      codes.push(`export const ${formName} = form(\n\tz.record(z.string(), z.any()).pipe(z.custom<{ path: ${pathType}; body: ${bodyType} }>()),\n\tasync (input) => ${formHandler}('${pathStr}', input)\n);`);
+    } else if (info.hasParams && !info.hasBody) {
+      // Path params but no request body: only accept `{ path }` so callers don't need `body: {}`.
+      codes.push(`export const ${commandName} = command(\n\tz.object({\n\t\tpath: z.custom<${pathType}>()\n\t}),\n\tasync (input) => ${commandHandler}('${pathStr}', input)\n);`);
+      codes.push(`export const ${formName} = form(\n\tz.record(z.string(), z.any()).pipe(z.custom<{ path: ${pathType} }>()),\n\tasync (input) => ${formHandler}('${pathStr}', input)\n);`);
+    } else if (!info.hasParams && info.hasBody) {
+      codes.push(`export const ${commandName} = command(\n\tz.custom<${bodyType}>(),\n\tasync (body) => ${commandHandler}('${pathStr}', body)\n);`);
+      codes.push(`export const ${formName} = form(\n\tz.record(z.string(), z.any()).pipe(z.custom<${bodyType}>()),\n\tasync (body) => ${formHandler}('${pathStr}', body)\n);`);
+    } else {
+      // No path params and no request body: a no-argument action command (e.g. billing reactivate).
+      codes.push(`export const ${commandName} = command(\n\tz.void(),\n\tasync () => ${commandHandler}('${pathStr}')\n);`);
+      codes.push(`export const ${formName} = form(\n\tz.record(z.string(), z.any()),\n\tasync () => ${formHandler}('${pathStr}')\n);`);
+    }
   }
 
   return codes;

@@ -67,6 +67,16 @@ interface MockPaths {
       };
     };
   };
+  '/notes': {
+    // Optional request body (`requestBody?:`) — the common openapi-typescript output when the
+    // OpenAPI operation marks its body `required: false`.
+    post: {
+      requestBody?: { content: { 'application/json': { text?: string } } };
+      responses: {
+        200: { content: { 'application/json': { id: number } } };
+      };
+    };
+  };
 }
 
 describe('PathsWithMethod', () => {
@@ -99,9 +109,15 @@ describe('GetParameters', () => {
 });
 
 describe('GetRequestBody', () => {
-  it('extracts JSON request body', () => {
+  it('extracts a required JSON request body', () => {
     type Result = GetRequestBody<MockPaths, '/users', 'post'>;
     expectTypeOf<Result>().toEqualTypeOf<{ name: string; email: string }>();
+  });
+
+  it('extracts an OPTIONAL JSON request body (requestBody?:)', () => {
+    // Regression: only matching the required `requestBody:` form typed these as `never`.
+    type Result = GetRequestBody<MockPaths, '/notes', 'post'>;
+    expectTypeOf<Result>().toEqualTypeOf<{ text?: string }>();
   });
 });
 

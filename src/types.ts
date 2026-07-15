@@ -13,13 +13,20 @@ export type GetParameters<
   TMethod extends keyof Paths[TPath],
 > = Paths[TPath][TMethod] extends { parameters: infer P } ? P : never;
 
-/** Extract JSON request body for a given path and method */
+/**
+ * Extract the JSON request body for a given path and method.
+ *
+ * Uses `requestBody?:` (optional) in the constraint so it matches BOTH a required body
+ * (`requestBody: {...}`) and an optional one (`requestBody?: {...}`). openapi-typescript emits the
+ * optional form whenever the OpenAPI operation marks its body `required: false` — which is the
+ * common case — so matching only the required form typed those endpoints as `never`.
+ */
 export type GetRequestBody<
   Paths,
   TPath extends keyof Paths,
   TMethod extends keyof Paths[TPath],
 > = Paths[TPath][TMethod] extends {
-  requestBody: { content: { 'application/json': infer B } };
+  requestBody?: { content: { 'application/json': infer B } };
 }
   ? B
   : never;

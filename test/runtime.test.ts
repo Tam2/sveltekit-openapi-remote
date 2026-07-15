@@ -56,15 +56,40 @@ describe('createRemoteHandlers', () => {
       await expect(handleGetQuery('/users', {})).rejects.toThrow();
     });
 
-    it('throws 404 when data is missing', async () => {
+    it('returns empty data on a successful (2xx) response with no body', async () => {
+      // 204 No Content / void endpoints: an empty body on an ok response is success, not a 404.
       const client = createMockClient();
       client.GET.mockResolvedValue({
         data: undefined,
         error: undefined,
-        response: { ok: true, status: 200 },
+        response: { ok: true, status: 204 },
+      });
+      const { handleGetQuery } = createRemoteHandlers(client as any);
+      await expect(handleGetQuery('/users', {})).resolves.toBeUndefined();
+    });
+
+    it('throws when a non-ok response has no data', async () => {
+      const client = createMockClient();
+      client.GET.mockResolvedValue({
+        data: undefined,
+        error: undefined,
+        response: { ok: false, status: 404 },
       });
       const { handleGetQuery } = createRemoteHandlers(client as any);
       await expect(handleGetQuery('/users', {})).rejects.toThrow();
+    });
+
+    it('uses response.status for errors, not just error.statusCode', async () => {
+      // Non-Nest APIs return an error body without `statusCode`; the real status must still surface.
+      const client = createMockClient();
+      client.POST.mockResolvedValue({
+        data: undefined,
+        error: { message: 'Conflict' },
+        response: { ok: false, status: 409 },
+      });
+      const { handlePostCommand } = createRemoteHandlers(client as any);
+      const err = await handlePostCommand('/things', { name: 'x' }).catch((e) => e);
+      expect((err as { status: number }).status).toBe(409);
     });
   });
 
@@ -80,6 +105,33 @@ describe('createRemoteHandlers', () => {
       const result = await handlePostCommand('/users', { name: 'Test' });
       expect(client.POST).toHaveBeenCalledWith('/users', { body: { name: 'Test' } });
       expect(result).toEqual({ id: 1, name: 'Test' });
+    });
+
+    it('sends params but NO body for a path-only input (no request body)', async () => {
+      const client = createMockClient();
+      client.POST.mockResolvedValue({
+        data: { ok: true },
+        error: undefined,
+        response: { ok: true, status: 200 },
+      });
+      const { handlePostCommand } = createRemoteHandlers(client as any);
+      await handlePostCommand('/invitations/{id}/resend', { path: { id: 'abc' } });
+      // Must NOT forward `{ path }` as the request body to a no-body endpoint.
+      expect(client.POST).toHaveBeenCalledWith('/invitations/{id}/resend', {
+        params: { path: { id: 'abc' } },
+      });
+    });
+
+    it('sends neither params nor body for a no-arg action (undefined input)', async () => {
+      const client = createMockClient();
+      client.POST.mockResolvedValue({
+        data: { ok: true },
+        error: undefined,
+        response: { ok: true, status: 200 },
+      });
+      const { handlePostCommand } = createRemoteHandlers(client as any);
+      await handlePostCommand('/billing/reactivate', undefined);
+      expect(client.POST).toHaveBeenCalledWith('/billing/reactivate', {});
     });
   });
 
@@ -133,6 +185,20 @@ describe('createRemoteHandlers', () => {
         body: { firstName: 'Tam', lastName: 'M' },
       });
       expect(result).toEqual({ updated: true });
+    });
+
+    it('sends params but NO body for a path-only input (no request body)', async () => {
+      const client = createMockClient();
+      client.PATCH.mockResolvedValue({
+        data: { ok: true },
+        error: undefined,
+        response: { ok: true, status: 200 },
+      });
+      const { handlePatchCommand } = createRemoteHandlers(client as any);
+      await handlePatchCommand('/things/{id}/toggle', { path: { id: 7 } });
+      expect(client.PATCH).toHaveBeenCalledWith('/things/{id}/toggle', {
+        params: { path: { id: 7 } },
+      });
     });
   });
 
