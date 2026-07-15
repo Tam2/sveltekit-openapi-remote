@@ -92,7 +92,13 @@ jobs:
       - name: Set package version
         env:
           RELEASE_VERSION: ${{ needs.preflight.outputs.version }}
-        run: npm version "$RELEASE_VERSION" --no-git-tag-version
+        run: |
+          current="$(node -p "require('./package.json').version")"
+          if [[ "$current" == "$RELEASE_VERSION" ]]; then
+            echo "package.json already at $RELEASE_VERSION; skipping bump."
+          else
+            npm version "$RELEASE_VERSION" --no-git-tag-version
+          fi
 
       - run: pnpm run build
 
