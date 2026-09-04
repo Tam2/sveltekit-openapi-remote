@@ -27,8 +27,15 @@ function getVersion(): string {
   return pkg.version;
 }
 
-function getNpxCommand(): string {
-  return process.platform === 'win32' ? 'npx.cmd' : 'npx';
+function getDlxCommand(): {executable: string, arguments: string[]} {
+  const ua = process.env.npm_config_user_agent ?? ''
+
+  if (ua.startsWith('pnpm/')) return { executable: `pnpm`, arguments: ['dlx'] };
+  if (ua.startsWith('npm/')) return { executable: `npm`, arguments: ['dlx'] };
+  if (ua.startsWith('yarn/')) return { executable: `yarn`, arguments: ['dlx'] };
+  if (ua.startsWith('bun/')) return { executable: `bunx`, arguments: [] };
+
+  throw new Error('unable to detect the package manager');
 }
 
 export function createProgram(): Command {
@@ -122,9 +129,10 @@ async function runGenerate(args: CliArgs): Promise<void> {
       fs.mkdirSync(args.output, { recursive: true });
     }
 
-    const result = spawn.sync(getNpxCommand(), ['openapi-typescript', args.spec, '-o', outputTypesPath], {
-        stdio: 'pipe',
-      });
+    const dlx = getDlxCommand();
+    const result = spawn.sync(dlx.executable, [...dlx.arguments, 'openapi-typescript', args.spec, '-o', outputTypesPath], {
+      stdio: 'pipe',
+    });
 
     if (result.error || result.status !== 0) {
       s.fail('openapi-typescript failed');
