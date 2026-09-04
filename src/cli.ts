@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { Command, Option } from 'commander';
-import { execFileSync } from 'node:child_process';
+import spawn from 'cross-spawn';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -122,17 +122,18 @@ async function runGenerate(args: CliArgs): Promise<void> {
       fs.mkdirSync(args.output, { recursive: true });
     }
 
-    try {
-      execFileSync(getNpxCommand(), ['openapi-typescript', args.spec, '-o', outputTypesPath], {
+    const result = spawn.sync(getNpxCommand(), ['openapi-typescript', args.spec, '-o', outputTypesPath], {
         stdio: 'pipe',
       });
-      s.succeed(`Types generated ${chalk.dim(`→ ${outputTypesPath}`)}`);
-    } catch (e: any) {
+
+    if (result.error || result.status !== 0) {
       s.fail('openapi-typescript failed');
-      const stderr = e?.stderr?.toString().trim();
+      const stderr = result.stderr?.toString().trim();
       const detail = stderr ? `\n${stderr}` : '';
-      throw new Error(`openapi-typescript failed. Is it installed? (npm install -D openapi-typescript)${detail}`);
+      throw new Error(`openapi-typescript failed. Is it installed? (npm install -D openapi-typescript)${detail ? `\n${detail}` : ''}`);
     }
+
+    s.succeed(`Types generated ${chalk.dim(`→ ${outputTypesPath}`)}`);
 
     typesPath = outputTypesPath;
   }
