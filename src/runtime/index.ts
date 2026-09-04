@@ -55,8 +55,24 @@ function buildRequestOptions(input: any) {
   };
 }
 
-export function createRemoteHandlers(client: OpenapiClient) {
+type OpenapiClientSource =
+  | OpenapiClient
+  | Promise<OpenapiClient>
+  | (() => OpenapiClient | Promise<OpenapiClient>);
+
+export function createRemoteHandlers(clientSource: OpenapiClientSource, cacheClient: boolean = true) {
+  let clientPromise: Promise<OpenapiClient> | undefined;
+  async function resolveClient(): Promise<OpenapiClient> {
+    if (!clientPromise || !cacheClient) {
+      clientPromise = Promise.resolve(
+        typeof clientSource === 'function' ? clientSource() : clientSource,
+      );
+    }
+    return clientPromise;
+  }
+
   async function handleGetQuery(path: string, params: any) {
+    const client = await resolveClient();
     const { data, error, response } = await client.GET(path, { params });
     return handleResponse(response, error, data);
   }
@@ -65,21 +81,25 @@ export function createRemoteHandlers(client: OpenapiClient) {
   // no path params and no request body — `command(z.void(), async () => handlePostCommand(path))` —
   // type-check (buildRequestOptions(undefined) yields no params and no body).
   async function handlePostCommand(path: string, input?: any) {
+    const client = await resolveClient();
     const { data, error, response } = await client.POST(path, buildRequestOptions(input));
     return handleResponse(response, error, data);
   }
 
   async function handlePatchCommand(path: string, input?: any) {
+    const client = await resolveClient();
     const { data, error, response } = await client.PATCH(path, buildRequestOptions(input));
     return handleResponse(response, error, data);
   }
 
   async function handlePutCommand(path: string, input?: any) {
+    const client = await resolveClient();
     const { data, error, response } = await client.PUT(path, buildRequestOptions(input));
     return handleResponse(response, error, data);
   }
 
   async function handleDeleteCommand(path: string, params: any) {
+    const client = await resolveClient();
     const { data, error, response } = await client.DELETE(path, { params });
     return handleResponse(response, error, data);
   }

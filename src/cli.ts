@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { Command, Option } from 'commander';
-import { execFileSync } from 'node:child_process';
+import spawn from 'cross-spawn';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -27,8 +27,15 @@ function getVersion(): string {
   return pkg.version;
 }
 
-function getNpxCommand(): string {
-  return process.platform === 'win32' ? 'npx.cmd' : 'npx';
+function getDlxCommand(): {executable: string, arguments: string[]} {
+  const ua = process.env.npm_config_user_agent ?? ''
+
+  if (ua.startsWith('pnpm/')) return { executable: `pnpm`, arguments: ['dlx'] };
+  if (ua.startsWith('npm/')) return { executable: `npm`, arguments: ['dlx'] };
+  if (ua.startsWith('yarn/')) return { executable: `yarn`, arguments: ['dlx'] };
+  if (ua.startsWith('bun/')) return { executable: `bunx`, arguments: [] };
+
+  throw new Error('unable to detect the package manager');
 }
 
 export function createProgram(): Command {
@@ -122,17 +129,19 @@ async function runGenerate(args: CliArgs): Promise<void> {
       fs.mkdirSync(args.output, { recursive: true });
     }
 
-    try {
-      execFileSync(getNpxCommand(), ['openapi-typescript', args.spec, '-o', outputTypesPath], {
-        stdio: 'pipe',
-      });
-      s.succeed(`Types generated ${chalk.dim(`→ ${outputTypesPath}`)}`);
-    } catch (e: any) {
+    const dlx = getDlxCommand();
+    const result = spawn.sync(dlx.executable, [...dlx.arguments, 'openapi-typescript', args.spec, '-o', outputTypesPath], {
+      stdio: 'pipe',
+    });
+
+    if (result.error || result.status !== 0) {
       s.fail('openapi-typescript failed');
-      const stderr = e?.stderr?.toString().trim();
+      const stderr = result.stderr?.toString().trim();
       const detail = stderr ? `\n${stderr}` : '';
-      throw new Error(`openapi-typescript failed. Is it installed? (npm install -D openapi-typescript)${detail}`);
+      throw new Error(`openapi-typescript failed. Is it installed? (npm install -D openapi-typescript)${detail ? `\n${detail}` : ''}`);
     }
+
+    s.succeed(`Types generated ${chalk.dim(`→ ${outputTypesPath}`)}`);
 
     typesPath = outputTypesPath;
   }
