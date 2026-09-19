@@ -173,6 +173,9 @@ describe('generateFileContent', () => {
     expect(content).toContain('export const postUsersCommand = command(');
     expect(content).toContain('export const postUsersForm = form(');
     expect(content).toContain("z.custom<GetRequestBody<paths, '/users', 'post'>>()");
+    // The bare body is wrapped explicitly so a DTO with its own `body`/`path` field isn't unwrapped.
+    expect(content).toContain("async (body) => handlePostCommand('/users', { body })");
+    expect(content).toContain("async (body) => handlePostForm('/users', { body })");
   });
 
   it('generates PATCH with path params using z.object', () => {

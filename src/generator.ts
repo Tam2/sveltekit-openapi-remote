@@ -292,8 +292,11 @@ function generateFunctionCode(
       codes.push(`export const ${commandName} = command(\n\tz.object({\n\t\tpath: z.custom<${pathType}>()\n\t}),\n\tasync (input) => ${commandHandler}('${pathStr}', input)\n);`);
       codes.push(`export const ${formName} = form(\n\tz.record(z.string(), z.any()).pipe(z.custom<{ path: ${pathType} }>()),\n\tasync (input) => ${formHandler}('${pathStr}', input)\n);`);
     } else if (!info.hasParams && info.hasBody) {
-      codes.push(`export const ${commandName} = command(\n\tz.custom<${bodyType}>(),\n\tasync (body) => ${commandHandler}('${pathStr}', body)\n);`);
-      codes.push(`export const ${formName} = form(\n\tz.record(z.string(), z.any()).pipe(z.custom<${bodyType}>()),\n\tasync (body) => ${formHandler}('${pathStr}', body)\n);`);
+      // Callers pass the body bare, but hand it to the handler wrapped as `{ body }`: a bare body is
+      // ambiguous at runtime when the DTO itself has a `body` or `path` field (e.g. a comment's
+      // `body` text), which the handler would otherwise mistake for the `{ path, body }` envelope.
+      codes.push(`export const ${commandName} = command(\n\tz.custom<${bodyType}>(),\n\tasync (body) => ${commandHandler}('${pathStr}', { body })\n);`);
+      codes.push(`export const ${formName} = form(\n\tz.record(z.string(), z.any()).pipe(z.custom<${bodyType}>()),\n\tasync (body) => ${formHandler}('${pathStr}', { body })\n);`);
     } else {
       // No path params and no request body: a no-argument action command (e.g. billing reactivate).
       codes.push(`export const ${commandName} = command(\n\tz.void(),\n\tasync () => ${commandHandler}('${pathStr}')\n);`);

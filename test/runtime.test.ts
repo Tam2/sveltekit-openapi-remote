@@ -107,6 +107,21 @@ describe('createRemoteHandlers', () => {
       expect(result).toEqual({ id: 1, name: 'Test' });
     });
 
+    it('forwards a wrapped body whose DTO has its own `body` field intact', async () => {
+      // e.g. POST /comments { entityId, body: 'text' }: the generator wraps it as `{ body: dto }`,
+      // so only the outer envelope is unwrapped and the DTO's `body` text survives.
+      const client = createMockClient();
+      client.POST.mockResolvedValue({
+        data: { id: 1 },
+        error: undefined,
+        response: { ok: true, status: 201 },
+      });
+      const { handlePostCommand } = createRemoteHandlers(client as any);
+      const dto = { entityId: 'e1', body: 'hello' };
+      await handlePostCommand('/comments', { body: dto });
+      expect(client.POST).toHaveBeenCalledWith('/comments', { body: dto });
+    });
+
     it('sends params but NO body for a path-only input (no request body)', async () => {
       const client = createMockClient();
       client.POST.mockResolvedValue({
